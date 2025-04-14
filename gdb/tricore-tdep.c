@@ -423,7 +423,7 @@ layout.  */
 static void
 tricore_none_supply_gregset (const struct regset *regset,
 			     struct regcache *regcache,
-			     int regnum, void *gregs_buf, size_t len)
+			     int regnum, const void *gregs_buf, size_t len)
 {
   const gdb_byte *gregs = (const gdb_byte *) gregs_buf;
 
