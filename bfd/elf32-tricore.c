@@ -11707,6 +11707,128 @@ tricore_elf32_relax_delete_bytes(bfd *abfd, asection *sec, bfd_byte *contents, E
   return true;
 }
 
+/* Support for core dump NOTE sections.  */
+
+static bool
+elf32_tricore_nabi_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
+{
+  int offset;
+  size_t size;
+
+  switch (note->descsz)
+    {
+      default:
+	return false;
+
+      case 224:                /* Tricore 32-bit.  */
+       	/* pr_cursig */
+	elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
+
+       	/* pr_pid */
+	elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 24);
+
+	/* pr_reg */
+	offset = 72;
+	size = 148;
+
+       	break;
+    }
+
+  /* Make a ".reg/999" section.  */
+  return _bfd_elfcore_make_pseudosection (abfd, ".reg",
+					  size, note->descpos + offset);
+}
+
+static bool
+elf32_tricore_nabi_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
+{
+  switch (note->descsz)
+    {
+    default:
+	return false;
+
+    case 148:                /* Tricore elf_prpsinfo.  */
+	elf_tdata (abfd)->core->pid
+	 = bfd_get_32 (abfd, note->descdata + 12);
+	elf_tdata (abfd)->core->program
+	 = _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
+	elf_tdata (abfd)->core->command
+	 = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
+    }
+
+  /* Note that for some reason, a spurious space is tacked
+     onto the end of the args in some (at least one anyway)
+     implementations, so strip it off if it exists.  */
+  {
+    char *command = elf_tdata (abfd)->core->command;
+    int n = strlen (command);
+
+    if (0 < n && command[n - 1] == ' ')
+        command[n - 1] = '\0';
+  }
+
+  return true;
+}
+
+static char *
+elf32_tricore_nabi_write_core_note (bfd *abfd, char *buf, int *bufsiz,
+				    int note_type, ...)
+{
+  switch (note_type)
+    {
+    default:
+      return NULL;
+
+    case NT_PRPSINFO:
+      {
+	char data[124] ATTRIBUTE_NONSTRING;
+	va_list ap;
+
+	va_start (ap, note_type);
+	memset (data, 0, sizeof (data));
+	strncpy (data + 28, va_arg (ap, const char *), 16);
+#if GCC_VERSION == 8000 || GCC_VERSION == 8001
+	DIAGNOSTIC_PUSH;
+	/* GCC 8.0 and 8.1 warn about 80 equals destination size with
+	   -Wstringop-truncation:
+	   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85643
+	 */
+	DIAGNOSTIC_IGNORE_STRINGOP_TRUNCATION;
+#endif
+	strncpy (data + 44, va_arg (ap, const char *), 80);
+#if GCC_VERSION == 8000 || GCC_VERSION == 8001
+	DIAGNOSTIC_POP;
+#endif
+	va_end (ap);
+
+	return elfcore_write_note (abfd, buf, bufsiz,
+				   "CORE", note_type, data, sizeof (data));
+      }
+
+    case NT_PRSTATUS:
+      {
+	char data[224];
+	va_list ap;
+	long pid;
+	int cursig;
+	const void *greg;
+
+	va_start (ap, note_type);
+	memset (data, 0, sizeof (data));
+	pid = va_arg (ap, long);
+	bfd_put_32 (abfd, pid, data + 24);
+	cursig = va_arg (ap, int);
+	bfd_put_16 (abfd, cursig, data + 12);
+	greg = va_arg (ap, const void *);
+	memcpy (data + 72, greg, 148);
+	va_end (ap);
+
+	return elfcore_write_note (abfd, buf, bufsiz,
+				   "CORE", note_type, data, sizeof (data));
+      }
+    }
+}
+
 #define elf_backend_special_sections 		tricore_elf32_special_sections
 
 /* Now #define all necessary stuff to describe this target.  */
@@ -11719,6 +11841,11 @@ tricore_elf32_relax_delete_bytes(bfd *abfd, asection *sec, bfd_byte *contents, E
 #define ELF_MAXPAGESIZE			0x4000
 #define TARGET_LITTLE_SYM		tricore_elf32_vec
 #define TARGET_LITTLE_NAME		"elf32-tricore"
+
+#define elf_backend_grok_prstatus       elf32_tricore_nabi_grok_prstatus
+#define elf_backend_grok_psinfo         elf32_tricore_nabi_grok_psinfo
+#define elf_backend_write_core_note     elf32_tricore_nabi_write_core_note
+
 #define bfd_elf32_bfd_relax_section	tricore_elf32_relax_section
 #define bfd_elf32_bfd_reloc_type_lookup	tricore_elf32_reloc_type_lookup
 #define bfd_elf32_bfd_reloc_name_lookup	tricore_elf_reloc_name_lookup

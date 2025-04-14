@@ -17,6 +17,15 @@
 
 #include "features/tricore.c"
 #include "tricore-tdep.h"
+#include "regset.h"
+
+#ifdef HAVE_ELF
+#include "elf-none-tdep.h"
+#endif
+
+/* Core file and register set support.  */
+#define TRICORE_INT_REGISTER_SIZE     4
+#define TRICORE_NONE_SIZEOF_GREGSET   (37 * TRICORE_INT_REGISTER_SIZE)
 
 static enum return_value_convention
 tricore_return_value (struct gdbarch *gdbarch, struct value *function,
@@ -403,6 +412,66 @@ tricore_gnu_triplet_regexp (struct gdbarch *gdbarch)
 
 static char *tricore_disassembler_options = NULL;
 
+/* Supply register REGNUM from buffer GREGS_BUF (length LEN bytes) into
+REGCACHE.  If REGNUM is -1 then supply all registers.  The set of
+registers that this function will supply is limited to the general
+purpose registers.
+
+The layout of the registers here is based on the TRICORE NuttX
+layout.  */
+
+static void
+tricore_none_supply_gregset (const struct regset *regset,
+			     struct regcache *regcache,
+			     int regnum, void *gregs_buf, size_t len)
+{
+  const gdb_byte *gregs = (const gdb_byte *) gregs_buf;
+
+  for (int regno = TRICORE_D0_REGNUM; regno <= TRICORE_PC_REGNUM; regno++)
+    if (regnum == -1 || regnum == regno)
+      regcache->raw_supply (regno, gregs + TRICORE_INT_REGISTER_SIZE * regno);
+}
+
+/* Collect register REGNUM from REGCACHE and place it into buffer GREGS_BUF
+   (length LEN bytes).  If REGNUM is -1 then collect all registers.  The
+   set of registers that this function will collect is limited to the
+   general purpose registers.
+
+   The layout of the registers here is based on the Tricore NuttX
+   layout.  */
+
+static void
+tricore_none_collect_gregset (const struct regset *regset,
+			      const struct regcache *regcache,
+			      int regnum, void *gregs_buf, size_t len)
+{
+  gdb_byte *gregs = (gdb_byte *) gregs_buf;
+
+  for (int regno = TRICORE_D0_REGNUM; regno <= TRICORE_PC_REGNUM; regno++)
+    if (regnum == -1 || regnum == regno)
+	regcache->raw_collect (regno,
+			       gregs + TRICORE_INT_REGISTER_SIZE * regno);
+}
+
+/* The general purpose register set.  */
+
+static const struct regset tricore_none_gregset =
+  {
+    nullptr, tricore_none_supply_gregset, tricore_none_collect_gregset
+  };
+
+/* Iterate over core file register note sections.  */
+
+static void
+tricore_none_iterate_over_regset_sections (struct gdbarch *gdbarch,
+                                           iterate_over_regset_sections_cb *cb,
+					   void *cb_data,
+					   const struct regcache *regcache)
+{
+  cb (".reg", TRICORE_NONE_SIZEOF_GREGSET, TRICORE_NONE_SIZEOF_GREGSET,
+      &tricore_none_gregset, nullptr, cb_data);
+}
+
 /* Initialize the current architecture based on INFO.  If possible,
    re-use an architecture from ARCHES, which is a list of
    architectures already created during this debugging session.
@@ -547,6 +616,14 @@ tricore_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (tdesc_data != NULL)
     tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data));
 
+  /* Iterate over registers for reading and writing bare metal TRICORE core
+     files.  */
+  set_gdbarch_iterate_over_regset_sections
+     (gdbarch, tricore_none_iterate_over_regset_sections);
+
+#ifdef HAVE_ELF
+  elf_none_init_abi (gdbarch);
+#endif
   return gdbarch;
 }
 
