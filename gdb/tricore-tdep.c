@@ -149,6 +149,8 @@ tricore_frame_cache (frame_info_ptr this_frame, void **this_cache)
   (*this_cache) = cache;
 
   cache->pcx = get_frame_register_unsigned (this_frame, TRICORE_PCX_REGNUM);
+  cache->frame_ptr
+      = get_frame_register_unsigned (this_frame, TRICORE_A10_REGNUM);
   if (!cache->pcx)
     {
       return cache;
@@ -156,13 +158,13 @@ tricore_frame_cache (frame_info_ptr this_frame, void **this_cache)
   CORE_ADDR context
       = ((cache->pcx & 0xF0000) << 12) | ((cache->pcx & 0xFFFF) << 6);
 
-  cache->regs[TRICORE_PC_REGNUM].set_realreg (TRICORE_A11_REGNUM);
   if (cache->pcx & 0x100000)
     {
       cache->regs[TRICORE_PCX_REGNUM].set_addr (context);
       cache->regs[TRICORE_PSW_REGNUM].set_addr (context + 0x4);
       cache->regs[TRICORE_A10_REGNUM].set_addr (context + 0x8);
       cache->regs[TRICORE_A11_REGNUM].set_addr (context + 0xC);
+      cache->regs[TRICORE_PC_REGNUM].set_addr (context + 0xC);
       cache->regs[TRICORE_D8_REGNUM].set_addr (context + 0x10);
       cache->regs[TRICORE_D9_REGNUM].set_addr (context + 0x14);
       cache->regs[TRICORE_D10_REGNUM].set_addr (context + 0x18);
@@ -180,6 +182,7 @@ tricore_frame_cache (frame_info_ptr this_frame, void **this_cache)
     {
       cache->regs[TRICORE_PCX_REGNUM].set_addr (context);
       cache->regs[TRICORE_A11_REGNUM].set_addr (context + 0x4);
+      cache->regs[TRICORE_PC_REGNUM].set_addr (context + 0x4);
       cache->regs[TRICORE_A2_REGNUM].set_addr (context + 0x8);
       cache->regs[TRICORE_A3_REGNUM].set_addr (context + 0xC);
       cache->regs[TRICORE_D0_REGNUM].set_addr (context + 0x10);
